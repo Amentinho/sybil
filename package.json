@@ -1,0 +1,15 @@
+{
+  "name": "sybil-0g-bridge",
+  "version": "1.0.0",
+  "description": "0G Storage bridge for SYBIL - writes threat records to 0G testnet",
+  "main": "og_storage.js",
+  "scripts": {
+    "test": "node og_storage.js '{\"test\":true}' ''",
+    "install-deps": "npm install @0gfoundation/0g-ts-sdk ethers"
+  },
+  "dependencies": {
+    "@0gfoundation/0g-ts-sdk": "latest",
+    "ethers": "^6.0.0"
+  },
+  "license": "MIT"
+}
