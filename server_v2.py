@@ -3,7 +3,7 @@ SYBIL Dashboard Server
 Flask API + HTML dashboard for the SYBIL network
 """
 
-from flask import Flask, jsonify, request, render_template_string
+from flask import Flask, jsonify, request, Response
 from sybil_v2 import network, initialize, get_all_threats, AGENTS
 import threading
 import time
@@ -434,8 +434,27 @@ DASHBOARD_HTML = """
       </div>
     </div>
   </div>
-  SYBIL · Built with Gensyn AXL · 0G Storage · ENS · ETHGlobal Open Agents 2026<br>
-  AI-assisted development: Claude (Anthropic) · Concept & Architecture: Andrea Amenta (@Amentinho)
+
+<div class="panel" id="bootstrapPanel">
+  <h2>&#x1F9EC; AGENT4 COLD BOOTSTRAP &mdash; COLLECTIVE MEMORY DEMO</h2>
+  <div style="margin-bottom:14px;font-size:0.8rem;color:#666699">
+    Spawn a brand new agent with zero prior knowledge. It reads the 0G threat ledger
+    and immediately knows who the attackers are &mdash; before its first interaction.
+    This is institutional memory for machines.
+  </div>
+  <button class="attack-btn" id="bootstrapBtn" onclick="runBootstrap()"
+    style="background:linear-gradient(135deg,#00aaff,#0044aa)">
+    &#x1F9EC; Spawn newcomer.sybil.eth
+  </button>
+  <div id="bootstrapOutput"
+    style="margin-top:16px;font-family:monospace;font-size:0.75rem;white-space:pre-wrap;
+           color:#aaaacc;background:#050510;padding:16px;border-radius:8px;
+           min-height:60px;max-height:400px;overflow-y:auto;display:none"></div>
+</div>
+
+<footer style="text-align:center;padding:20px;color:#333355;font-size:0.7rem;letter-spacing:0.1em">
+  SYBIL &middot; Built with Gensyn AXL &middot; 0G Storage &middot; ENS &middot; ETHGlobal Open Agents 2026<br>
+  AI-assisted development: Claude (Anthropic) &middot; Concept &amp; Architecture: Andrea Amenta (@Amentinho)
 </footer>
 
 <script>
@@ -460,37 +479,34 @@ async function fetchState() {
 function updateAgents(agents) {
   const grid = document.getElementById('agentGrid');
   const colors = { agent1: '#00ff88', agent2: '#00aaff', agent3: '#aa00ff' };
-  
-  grid.innerHTML = Object.entries(agents).map(([id, a]) => {
+  grid.innerHTML = Object.entries(agents).map(function(entry) {
+    const id = entry[0], a = entry[1];
     const pct = Math.max(0, (a.stake / 1000) * 100).toFixed(1);
-    const statusClass = `status-${a.status}`;
-    const cardClass = a.status !== 'active' ? `agent-card ${a.status}` : 'agent-card';
-    
-    return `
-    <div class="${cardClass}" style="--agent-color:${colors[id]}">
-      <div class="agent-name">${a.name}</div>
-      <div class="agent-role">${a.role} · AXL ${a.axl_key}</div>
-      <div class="stake-bar-wrap">
-        <div class="stake-bar" style="width:${pct}%"></div>
-      </div>
-      <div class="stat-row"><span>Stake</span><span>${a.stake.toFixed(1)} SYBIL</span></div>
-      <div class="stat-row"><span>Attacks Detected</span><span>${a.attacks_detected}</span></div>
-      <div class="stat-row"><span>Attacks Launched</span><span>${a.attacks_launched}</span></div>
-      <div class="stat-row"><span>Votes Cast</span><span>${a.votes_cast}</span></div>
-      <div><span class="status-badge ${statusClass}">${a.status}</span></div>
-    </div>`;
+    const statusClass = 'status-' + a.status;
+    const cardClass = a.status !== 'active' ? 'agent-card ' + a.status : 'agent-card';
+    const color = colors[id] || '#ffffff';
+    return '<div class="' + cardClass + '" style="--agent-color:' + color + '">'
+      + '<div class="agent-name">' + a.name + '</div>'
+      + '<div class="agent-role">' + a.role + ' \xb7 AXL ' + a.axl_key + '</div>'
+      + '<div class="stake-bar-wrap"><div class="stake-bar" style="width:' + pct + '%"></div></div>'
+      + '<div class="stat-row"><span>Stake</span><span>' + a.stake.toFixed(1) + ' SYBIL</span></div>'
+      + '<div class="stat-row"><span>Attacks Detected</span><span>' + a.attacks_detected + '</span></div>'
+      + '<div class="stat-row"><span>Attacks Launched</span><span>' + a.attacks_launched + '</span></div>'
+      + '<div class="stat-row"><span>Votes Cast</span><span>' + a.votes_cast + '</span></div>'
+      + '<div><span class="status-badge ' + statusClass + '">' + a.status + '</span></div>'
+      + '</div>';
   }).join('');
 }
 
 function updateLog(entries) {
   if (!entries || entries.length === 0) return;
   const container = document.getElementById('logContainer');
-  container.innerHTML = [...entries].reverse().map(e => `
-    <div class="log-entry">
-      <span class="log-ts">${e.ts}</span>
-      <span class="log-level-${e.level}">${e.msg}</span>
-    </div>
-  `).join('');
+  container.innerHTML = [...entries].reverse().map(function(e) {
+    return '<div class="log-entry">'
+      + '<span class="log-ts">' + e.ts + '</span>'
+      + '<span class="log-level-' + e.level + '">' + e.msg + '</span>'
+      + '</div>';
+  }).join('');
 }
 
 function updateThreats(threats) {
@@ -499,15 +515,18 @@ function updateThreats(threats) {
     tbody.innerHTML = '<tr><td colspan="5" style="color:#333355;text-align:center;padding:20px">No threats recorded yet</td></tr>';
     return;
   }
-  tbody.innerHTML = threats.map(t => `
-    <tr>
-      <td>${t.timestamp ? t.timestamp.substring(11,19) : '--'}</td>
-      <td>${t.attacker_name || '--'}</td>
-      <td>${t.victim_name || '--'}</td>
-      <td class="verdict-${(t.verdict||'').toLowerCase()}">${t.verdict || '--'}</td>
-      <td>${t.slash_amount ? t.slash_amount.toFixed(1) : '0'}</td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = threats.map(function(t) {
+    const ts = t.timestamp ? t.timestamp.substring(11,19) : '--';
+    const verdict = (t.verdict || '').toLowerCase();
+    const slash = t.slash_amount ? t.slash_amount.toFixed(1) : '0';
+    return '<tr>'
+      + '<td>' + ts + '</td>'
+      + '<td>' + (t.attacker_name || '--') + '</td>'
+      + '<td>' + (t.victim_name || '--') + '</td>'
+      + '<td class="verdict-' + verdict + '">' + (t.verdict || '--') + '</td>'
+      + '<td>' + slash + '</td>'
+      + '</tr>';
+  }).join('');
 }
 
 function updateStats(threats) {
@@ -525,7 +544,7 @@ function updateStats(threats) {
 }
 
 function await_health() {
-  return 100; // simplified — real: check agent stakes
+  return 100; // simplified - real: check agent stakes
 }
 
 async function triggerAttack() {
@@ -540,7 +559,7 @@ async function triggerAttack() {
   isAttacking = true;
   const btn = document.getElementById('attackBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinning">⟳</span> Simulating...';
+  btn.innerHTML = '<span class="spinning">&#x27F3;</span> Simulating...';
 
   try {
     await fetch('/api/attack', {
@@ -553,12 +572,31 @@ async function triggerAttack() {
   setTimeout(() => {
     isAttacking = false;
     btn.disabled = false;
-    btn.innerHTML = '🚨 Launch Attack';
+    btn.innerHTML = '&#x1F6A8; Launch Attack';
   }, 5000);
 }
 
 async function resetNetwork() {
   await fetch('/api/reset', { method: 'POST' });
+}
+
+async function runBootstrap() {
+  const btn = document.getElementById('bootstrapBtn');
+  const out = document.getElementById('bootstrapOutput');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinning">&#x27F3;</span> Bootstrapping...';
+  out.style.display = 'block';
+  out.textContent = 'Connecting to AXL mesh and reading 0G threat ledger...';
+  try {
+    const r = await fetch('/api/bootstrap', { method: 'POST' });
+    const data = await r.json();
+    out.textContent = data.output || 'No output';
+    out.scrollTop = out.scrollHeight;
+  } catch(e) {
+    out.textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '&#x1F9EC; Spawn newcomer.sybil.eth';
 }
 
 // Poll every 1.5s
@@ -573,7 +611,7 @@ fetchState();
 
 @app.route("/")
 def index():
-    return render_template_string(DASHBOARD_HTML)
+    return Response(DASHBOARD_HTML, mimetype='text/html')
 
 @app.route("/api/state")
 def api_state():
@@ -643,6 +681,33 @@ def api_og_status():
 @app.route("/api/health")
 def api_health():
     return jsonify({"status": "ok", "agents": len(network.public_keys)})
+
+# ── Improvement 3: Agent4 Bootstrap API ──────────────────────────────────────
+import os as _os
+import subprocess as _sp
+import re as _re
+
+@app.route("/api/bootstrap", methods=["POST"])
+def api_bootstrap():
+    """Run agent4 cold bootstrap and return the output."""
+    try:
+        result = _sp.run(
+            ["python3", "agent4_bootstrap.py"],
+            capture_output=True, text=True, timeout=15,
+            cwd=_os.path.dirname(_os.path.abspath(__file__))
+        )
+        clean = _re.sub(r'\033\[[0-9;]*m', '', result.stdout)
+        return jsonify({"output": clean, "success": True})
+    except Exception as e:
+        return jsonify({"output": str(e), "success": False})
+
+@app.route("/api/reputation")
+def api_reputation():
+    """Return agent reputation map from threat ledger."""
+    from agent4_bootstrap import read_threat_ledger, build_reputation_map
+    threats = read_threat_ledger()
+    rep = build_reputation_map(threats)
+    return jsonify(rep)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
