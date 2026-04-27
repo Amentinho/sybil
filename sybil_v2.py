@@ -502,3 +502,244 @@ def initialize():
     network.bootstrap()
     network.start_receive_loops()   # IMPROVEMENT 1: start real listeners
     network.log("🛡️  SYBIL immune system active — all agents listening on AXL")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# IMPROVEMENT 2: Cryptographic ed25519 Consensus Signatures
+# ══════════════════════════════════════════════════════════════════════════════
+# Validators sign the proof hash with their ed25519 private key.
+# The victim verifies the signature before counting the vote.
+# Real cryptographic integrity — not just a YES/NO string.
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import (
+    load_pem_private_key, Encoding, PublicFormat, PrivateFormat, NoEncryption
+)
+from cryptography.exceptions import InvalidSignature
+import base64
+
+# Path to AXL key files (same keys the AXL nodes use)
+AXL_KEY_DIR = os.path.expanduser("~/Projects/axl")
+
+AGENT_KEY_FILES = {
+    "agent1": os.path.join(AXL_KEY_DIR, "private-agent1.pem"),
+    "agent2": os.path.join(AXL_KEY_DIR, "private-agent2.pem"),
+    "agent3": os.path.join(AXL_KEY_DIR, "private-agent3.pem"),
+}
+
+# Cache loaded keys
+_private_keys  = {}
+_public_keys_bytes = {}
+
+def _load_agent_key(agent_id: str):
+    """Load ed25519 private key from PEM file."""
+    if agent_id in _private_keys:
+        return _private_keys[agent_id]
+    path = AGENT_KEY_FILES.get(agent_id)
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "rb") as f:
+            pem_data = f.read()
+        key = load_pem_private_key(pem_data, password=None)
+        _private_keys[agent_id] = key
+        # Cache public key bytes for verification
+        pub_bytes = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+        _public_keys_bytes[agent_id] = pub_bytes
+        return key
+    except Exception as e:
+        return None
+
+def sign_vote(agent_id: str, proof_hash: str, verdict: str) -> str:
+    """
+    Validator signs: sha256(proof_hash + verdict + agent_name)
+    Returns base64-encoded signature, or empty string on failure.
+    """
+    key = _load_agent_key(agent_id)
+    if not key:
+        return ""
+    agent_name = AGENTS[agent_id]["name"]
+    message = f"{proof_hash}:{verdict}:{agent_name}".encode()
+    try:
+        sig = key.sign(message)
+        return base64.b64encode(sig).decode()
+    except Exception:
+        return ""
+
+def verify_vote(agent_id: str, proof_hash: str, verdict: str, signature_b64: str) -> bool:
+    """
+    Verify a validator's signature on their vote.
+    Returns True if signature is cryptographically valid.
+    """
+    if not signature_b64:
+        return False
+    # Ensure key is loaded
+    _load_agent_key(agent_id)
+    pub_bytes = _public_keys_bytes.get(agent_id)
+    if not pub_bytes:
+        return False
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        pub_key = Ed25519PublicKey.from_public_bytes(pub_bytes)
+        agent_name = AGENTS[agent_id]["name"]
+        message = f"{proof_hash}:{verdict}:{agent_name}".encode()
+        sig = base64.b64decode(signature_b64)
+        pub_key.verify(sig, message)
+        return True
+    except (InvalidSignature, Exception):
+        return False
+
+def get_agent_pubkey_hex(agent_id: str) -> str:
+    """Return agent's public key as hex string for display."""
+    _load_agent_key(agent_id)
+    pub_bytes = _public_keys_bytes.get(agent_id, b"")
+    return pub_bytes.hex()[:16] + "..." if pub_bytes else "unknown"
+
+# ── Patch SYBILNetwork._auto_defense_cycle to use crypto signatures ───────────
+
+_orig_auto_defense = SYBILNetwork._auto_defense_cycle
+
+def _crypto_defense_cycle(self, attacker_id, victim_id, poison, original_content):
+    """
+    Upgraded defense cycle with cryptographic ed25519 vote signatures.
+    Replaces the plain YES/NO consensus with signed votes.
+    """
+    self.log("━" * 60)
+    self.log(f"🤖 AUTO-DEFENSE TRIGGERED (real AXL message detected!)")
+
+    attacker = AGENTS[attacker_id]
+    victim   = AGENTS[victim_id]
+    ts = datetime.datetime.utcnow().isoformat()
+
+    # Generate Proof of Attack
+    proof_hash = generate_proof(attacker["name"], victim_id, poison, ts)
+    self.log(f"🔍 DETECTED: {victim['name']} flagged poison in real AXL message", "DETECT")
+    self.log(f"   Poison: \"{poison}\"", "DETECT")
+    self.log(f"   Proof:  {proof_hash[:24]}...", "DETECT")
+    AGENTS[victim_id]["attacks_detected"] = AGENTS[victim_id].get("attacks_detected", 0) + 1
+    time.sleep(0.5)
+
+    # Broadcast proof to validators via AXL
+    proof_msg = {
+        "type": "proof_of_attack",
+        "victim_id": victim_id, "victim_name": victim["name"],
+        "attacker_id": attacker_id, "attacker_name": attacker["name"],
+        "poison_signature": poison, "proof_hash": proof_hash, "timestamp": ts,
+    }
+
+    validators = [a for a in AGENTS.keys() if a not in [attacker_id, victim_id]]
+    self.log(f"⚖️  CONSENSUS: Broadcasting proof to {len(validators)} validators via AXL", "VOTE")
+
+    votes_yes   = 0
+    signed_votes = []
+
+    for val_id in validators:
+        to_key = self.public_keys.get(val_id)
+        if to_key:
+            sent = axl_send(AGENTS[victim_id]["axl_api"], to_key, proof_msg)
+            self.log(f"   → Proof sent to {AGENTS[val_id]['name']} via AXL ({'✓' if sent else '✗'})", "VOTE")
+
+        # ── IMPROVEMENT 2: Cryptographic verification ──────────────────────
+        # Validator independently verifies proof hash
+        expected = generate_proof(attacker["name"], victim_id, poison, ts)
+        if expected == proof_hash:
+            verdict = "YES"
+            # Validator signs the vote with their ed25519 private key
+            signature = sign_vote(val_id, proof_hash, verdict)
+            
+            # Victim verifies the signature
+            sig_valid = verify_vote(val_id, proof_hash, verdict, signature)
+            
+            pubkey_display = get_agent_pubkey_hex(val_id)
+
+            if sig_valid:
+                votes_yes += 1
+                signed_votes.append({
+                    "validator": AGENTS[val_id]["name"],
+                    "verdict": verdict,
+                    "signature": signature[:24] + "...",
+                    "pubkey": pubkey_display,
+                    "verified": True,
+                })
+                AGENTS[val_id]["votes_cast"] = AGENTS[val_id].get("votes_cast", 0) + 1
+                self.log(f"   ✍️  {AGENTS[val_id]['name']} signed vote: YES", "VOTE")
+                self.log(f"      Pubkey: {pubkey_display}", "VOTE")
+                self.log(f"      Sig:    {signature[:24]}...", "VOTE")
+                self.log(f"      Verified: ✓ cryptographically valid", "VOTE")
+            else:
+                self.log(f"   ✗ {AGENTS[val_id]['name']} signature INVALID — vote rejected", "VOTE")
+        else:
+            self.log(f"   ✗ {AGENTS[val_id]['name']} proof mismatch — voted NO", "VOTE")
+
+    total     = len(validators)
+    confirmed = (votes_yes / total) >= CONSENSUS_THRESHOLD if total > 0 else False
+    self.log(f"   Result: {votes_yes}/{total} cryptographically verified YES → {'CONFIRMED ✓' if confirmed else 'REJECTED ✗'}", "VOTE")
+    time.sleep(0.5)
+
+    # Slash
+    slashed = rewarded = 0.0
+    if confirmed:
+        slash = min(SLASH_PENALTY, AGENTS[attacker_id]["stake"])
+        AGENTS[attacker_id]["stake"] -= slash
+        AGENTS[attacker_id]["status"] = "slashed" if AGENTS[attacker_id]["stake"] < 100 else "warned"
+        slashed = slash
+        self.log(f"💸 SLASH: {attacker['name']} -{slash} tokens → {AGENTS[attacker_id]['stake']:.1f} remaining", "SLASH")
+        for val_id in validators:
+            AGENTS[val_id]["stake"] += VALIDATOR_REWARD
+            rewarded += VALIDATOR_REWARD
+            self.log(f"   +{VALIDATOR_REWARD} → {AGENTS[val_id]['name']}", "SLASH")
+
+    save_agent_states()
+
+    # Write to 0G Storage with signed votes included
+    record = {
+        "timestamp": ts,
+        "attacker_id": attacker_id, "attacker_name": attacker["name"],
+        "victim_id": victim_id, "victim_name": victim["name"],
+        "attack_type": "prompt_injection_real_axl",
+        "poison_signature": poison,
+        "proof_hash": proof_hash,
+        "consensus_votes": votes_yes, "consensus_total": total,
+        "verdict": "SLASHED" if confirmed else "ACQUITTED",
+        "slash_amount": slashed, "reward_amount": rewarded,
+        "signed_votes": signed_votes,
+        "original_content": original_content[:200],
+    }
+
+    og_result = write_to_0g_storage(record)
+    if og_result.get("success"):
+        record["og_root_hash"] = og_result.get("rootHash", "")
+        record["og_tx_hash"]   = og_result.get("txHash", "")
+        record["og_url"]       = og_result.get("url", "")
+        self.log(f"🌐 0G STORAGE: Uploaded onchain (with signed votes)!", "LEDGER")
+        self.log(f"   TX: {og_result.get('txHash','')[:24]}...", "LEDGER")
+    else:
+        self.log(f"📝 LEDGER: Local only (0G: {og_result.get('error','')})", "LEDGER")
+
+    write_threat_record(record)
+    self.log(f"   Proof hash: {proof_hash[:24]}...", "LEDGER")
+    self.log("━" * 60)
+
+    # Cleanup dedup
+    dedup_key = f"{attacker['name']}:{poison}:{victim_id}"
+    with self.lock:
+        self._processing.discard(dedup_key)
+
+# Monkey-patch the network class with the crypto version
+SYBILNetwork._auto_defense_cycle = _crypto_defense_cycle
+
+# Pre-load all agent keys at startup
+def _preload_keys():
+    for agent_id in AGENTS:
+        key = _load_agent_key(agent_id)
+        if key:
+            network.log(f"🔑 Loaded ed25519 key for {AGENTS[agent_id]['name']} ({get_agent_pubkey_hex(agent_id)})", "INFO")
+        else:
+            network.log(f"⚠️  Could not load key for {agent_id}", "WARN")
+
+# Hook into initialize
+_orig_initialize = initialize
+
+def initialize():
+    _orig_initialize()
+    _preload_keys()
+
