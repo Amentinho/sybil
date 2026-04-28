@@ -13,6 +13,11 @@ AI-assisted: Claude (Anthropic)
 
 import json
 import time
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 import hashlib
 import sqlite3
 import threading
@@ -246,6 +251,15 @@ except ImportError:
     def weight_vote(n, w=1.0): return w
     def read_threat_ledger(): return []
     def build_reputation_map(t): return {}
+
+# Contract bridge — onchain slash + threat recording
+try:
+    from contract_bridge import bridge as _contract_bridge, get_agent_address
+    _contract_enabled = _contract_bridge.enabled
+except ImportError:
+    _contract_bridge = None
+    _contract_enabled = False
+    def get_agent_address(aid): return "0x2F7E204F76D47ea69F91Eae548C7C5B39B0Fc1c6"
 
 # ── SYBIL Network ─────────────────────────────────────────────────────────────
 class SYBILNetwork:

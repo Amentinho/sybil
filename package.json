@@ -24,6 +24,7 @@
     "solidity-coverage": "^0.8.17"
   },
   "dependencies": {
+    "@0gfoundation/0g-ts-sdk": "^1.2.6",
     "@openzeppelin/contracts": "^5.0.0",
     "dotenv": "^16.0.0"
   }

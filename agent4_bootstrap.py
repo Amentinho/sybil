@@ -34,6 +34,7 @@ DB_PATH     = os.path.join(os.path.dirname(__file__), "sybil_ledger.db")
 AXL_API     = "http://127.0.0.1:9002"
 OG_EXPLORER = "https://storagescan-newton.0g.ai/tx/"
 
+load_dotenv()
 LEDGER_ADDRESS = os.getenv("SYBIL_LEDGER_ADDRESS", "0x8A208055787db8B9D399a4D59aBDFF54fB9Ba35B")
 SEPOLIA_RPC    = os.getenv("SEPOLIA_RPC_URL", "")
 
