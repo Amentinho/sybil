@@ -366,8 +366,6 @@ DASHBOARD_HTML = """
         <option value="agent1">atlas.sybil.eth</option>
         <option value="agent2">sentinel.sybil.eth</option>
         <option value="agent3">oracle.sybil.eth</option>
-        <option value="agent4">warden.sybil.eth</option>
-        <option value="agent5">cipher.sybil.eth</option>
       </select>
     </div>
     <div class="select-wrap">
@@ -376,8 +374,6 @@ DASHBOARD_HTML = """
         <option value="agent2">sentinel.sybil.eth</option>
         <option value="agent1">atlas.sybil.eth</option>
         <option value="agent3">oracle.sybil.eth</option>
-        <option value="agent4">warden.sybil.eth</option>
-        <option value="agent5">cipher.sybil.eth</option>
       </select>
     </div>
     <button class="attack-btn" id="attackBtn" onclick="triggerAttack()">
@@ -423,11 +419,10 @@ DASHBOARD_HTML = """
 
   <div class="two-col">
     <div class="panel">
-      <h2>&#x1F310; 0G Storage + ENS Registry</h2>
+      <h2>🌐 0G Storage Status</h2>
       <div id="ogStatus" style="font-size:0.8rem;color:#666699;padding:10px 0">
-        Checking connections...
+        Checking 0G Storage connection...
       </div>
-      <div id="ensStatus" style="margin-top:10px;font-size:0.75rem"></div>
     </div>
     <div class="panel">
       <h2>🔗 Quick Links</h2>
@@ -441,15 +436,15 @@ DASHBOARD_HTML = """
   </div>
 
 <div class="panel" id="bootstrapPanel">
-  <h2>&#x1F9EC; AGENT4 COLD BOOTSTRAP &mdash; COLLECTIVE MEMORY DEMO</h2>
+  <h2>&#x1F9E0; COLLECTIVE MEMORY BOOTSTRAP</h2>
   <div style="margin-bottom:14px;font-size:0.8rem;color:#666699">
-    Spawn a brand new agent with zero prior knowledge. It reads the 0G threat ledger
-    and immediately knows who the attackers are &mdash; before its first interaction.
-    This is institutional memory for machines.
+    Spawn a new agent. It reads the threat ledger &mdash; local + Sepolia onchain &mdash;
+    and builds a live reputation map. Known attackers are pre-blocked before first contact.
+    Validator votes are weighted by trust score.
   </div>
   <button class="attack-btn" id="bootstrapBtn" onclick="runBootstrap()"
     style="background:linear-gradient(135deg,#00aaff,#0044aa)">
-    &#x1F9EC; Spawn newcomer.sybil.eth
+    &#x1F9E0; Bootstrap newcomer.sybil.eth
   </button>
   <div id="bootstrapOutput"
     style="margin-top:16px;font-family:monospace;font-size:0.75rem;white-space:pre-wrap;
@@ -479,16 +474,11 @@ async function fetchState() {
     updateThreats(threats);
     updateStats(threats);
   } catch(e) {}
-
-  try {
-    const r3 = await fetch('/api/ens');
-    const ens = await r3.json();
-    updateENS(ens);
-  } catch(e) {}
 }
+
 function updateAgents(agents) {
   const grid = document.getElementById('agentGrid');
-  const colors = { agent1: '#00ff88', agent2: '#00aaff', agent3: '#aa00ff', agent4: '#ff9900', agent5: '#ff00aa' };
+  const colors = { agent1: '#00ff88', agent2: '#00aaff', agent3: '#aa00ff' };
   grid.innerHTML = Object.entries(agents).map(function(entry) {
     const id = entry[0], a = entry[1];
     const pct = Math.max(0, (a.stake / 1000) * 100).toFixed(1);
@@ -594,7 +584,7 @@ async function runBootstrap() {
   const btn = document.getElementById('bootstrapBtn');
   const out = document.getElementById('bootstrapOutput');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinning">&#x27F3;</span> Bootstrapping...';
+  btn.innerHTML = '<span class="spinning">&#x27F3;</span> Reading ledger...';
   out.style.display = 'block';
   out.textContent = 'Connecting to AXL mesh and reading 0G threat ledger...';
   try {
@@ -606,20 +596,7 @@ async function runBootstrap() {
     out.textContent = 'Error: ' + e.message;
   }
   btn.disabled = false;
-  btn.innerHTML = '&#x1F9EC; Spawn newcomer.sybil.eth';
-}
-
-function updateENS(data) {
-  const el = document.getElementById('ensStatus');
-  if (!el || !data.agents) return;
-  const rpc = data.rpc_connected ? '<span style="color:#00ff88">connected</span>' : '<span style="color:#666699">local only</span>';
-  el.innerHTML = '<div style="color:#666699;margin-bottom:6px">ENS Registry: ' + rpc + ' | '
-    + (data.onchain_agents || 0) + ' onchain / ' + (data.local_agents || 0) + ' total</div>'
-    + (data.agents || []).map(function(a) {
-      const col = a.source === 'onchain' ? '#00ff88' : '#444466';
-      const badge = a.source === 'onchain' ? '&#x26D3;' : '&#x1F4BE;';
-      return '<div style="color:' + col + ';padding:2px 0">' + badge + ' ' + a.ens_name + ' (' + a.role + ')</div>';
-    }).join('');
+  btn.innerHTML = '&#x1F9E0; Bootstrap newcomer.sybil.eth';
 }
 
 // Poll every 1.5s
@@ -712,17 +689,16 @@ import re as _re
 
 @app.route("/api/bootstrap", methods=["POST"])
 def api_bootstrap():
-    """Run agent4 cold bootstrap and return the output."""
+    """Run collective memory bootstrap and return reputation output."""
     try:
-        result = _sp.run(
-            ["python3", "agent4_bootstrap.py"],
-            capture_output=True, text=True, timeout=15,
-            cwd=_os.path.dirname(_os.path.abspath(__file__))
-        )
-        clean = _re.sub(r'\033\[[0-9;]*m', '', result.stdout)
+        from agent4_bootstrap import run_bootstrap
+        import re as _re2
+        output = run_bootstrap("newcomer.sybil.eth")
+        clean = _re2.sub(r'\033\[[0-9;]*m', '', output)
         return jsonify({"output": clean, "success": True})
     except Exception as e:
-        return jsonify({"output": str(e), "success": False})
+        import traceback
+        return jsonify({"output": str(e) + "\n" + traceback.format_exc(), "success": False})
 
 @app.route("/api/reputation")
 def api_reputation():
@@ -731,27 +707,6 @@ def api_reputation():
     threats = read_threat_ledger()
     rep = build_reputation_map(threats)
     return jsonify(rep)
-
-# ── ENS Routes ───────────────────────────────────────────────────────────────
-
-@app.route("/api/ens")
-def api_ens():
-    """Return ENS registry status — onchain + local agents."""
-    try:
-        from ens_resolver import get_registry_status, resolve
-        status = get_registry_status()
-        return jsonify(status)
-    except Exception as e:
-        return jsonify({"error": str(e), "agents": []})
-
-@app.route("/api/ens/resolve/<path:ens_name>")
-def api_ens_resolve(ens_name):
-    """Resolve a specific ENS name."""
-    try:
-        from ens_resolver import resolve
-        return jsonify(resolve(ens_name))
-    except Exception as e:
-        return jsonify({"error": str(e)})
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":

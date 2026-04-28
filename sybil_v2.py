@@ -63,7 +63,7 @@ AGENTS = {
 }
 
 SLASH_PENALTY    = 150.0
-VALIDATOR_REWARD = 20.0
+VALIDATOR_REWARD = 30.0
 CONSENSUS_NUMERATOR   = 3
 CONSENSUS_DENOMINATOR = 5
 CONSENSUS_THRESHOLD   = CONSENSUS_NUMERATOR / CONSENSUS_DENOMINATOR
@@ -230,19 +230,22 @@ def write_to_0g_storage(record: dict) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
-# ENS resolver — loaded here so bootstrap() can use it
+# Collective memory bootstrap
 try:
-    from ens_resolver import (
-        reverse_resolve_axl, reverse_resolve_agent_id,
-        update_axl_key, get_registry_status
+    from agent4_bootstrap import (
+        bootstrap_reputation, get_reputation,
+        should_accept_message, weight_vote,
+        read_threat_ledger, build_reputation_map
     )
-    _ens_enabled = True
+    _bootstrap_enabled = True
 except ImportError:
-    _ens_enabled = False
-    def reverse_resolve_axl(k): return None
-    def reverse_resolve_agent_id(aid): return aid + ".sybil.eth"
-    def update_axl_key(n, k): pass
-    def get_registry_status(): return {}
+    _bootstrap_enabled = False
+    def bootstrap_reputation(): return {}
+    def get_reputation(n): return {"trust_score": 100, "blacklisted": False}
+    def should_accept_message(n, m): return True, "OK"
+    def weight_vote(n, w=1.0): return w
+    def read_threat_ledger(): return []
+    def build_reputation_map(t): return {}
 
 # ── SYBIL Network ─────────────────────────────────────────────────────────────
 class SYBILNetwork:
@@ -271,10 +274,9 @@ class SYBILNetwork:
                 self.public_keys[agent_id]  = key
                 self.key_to_agent[key]      = agent_id
                 self.log(f"  {info['name']} ({info['role']}) → {key[:16]}...")
-                update_axl_key(info["name"], key)  # register with ENS resolver
             else:
                 self.log(f"  WARNING: {agent_id} AXL node unreachable", "WARN")
-        self.log(f"Network ready: {len(self.public_keys)}/3 agents online")
+        self.log(f"Network ready: {len(self.public_keys)}/{len(AGENTS)} agents online")
         save_agent_states()
 
     # ── IMPROVEMENT 1: Real AXL receive loops ─────────────────────────────────
@@ -326,6 +328,13 @@ class SYBILNetwork:
             return
 
         # Check for poison in any incoming message
+        # Pre-filter: check sender reputation before processing
+        if _bootstrap_enabled and sender != "unknown":
+            accept, reason = should_accept_message(sender, content)
+            if not accept:
+                self.log(f"🛡️  PRE-FILTER: Message from {sender} REJECTED — {reason}", "DETECT")
+                return
+
         poison = detect_poison(content)
         if poison:
             # Deduplicate — don't process same attack twice
@@ -338,13 +347,10 @@ class SYBILNetwork:
             self.log(f"📨 REAL MESSAGE: {AGENTS[recipient_id]['name']} received from {sender}", "DETECT")
             self.log(f"   Content: \"{content[:60]}...\"", "DETECT")
 
-            # Find attacker_id from sender name or ENS reverse lookup
+            # Find attacker_id from sender name
             attacker_id = None
-            # Try ENS reverse lookup first (sender may be AXL pubkey)
-            ens_name = reverse_resolve_axl(sender) if len(sender) > 20 else None
             for aid, ainfo in AGENTS.items():
-                if (ainfo["name"] == sender or sender.startswith(aid)
-                        or (ens_name and ainfo["name"] == ens_name)):
+                if ainfo["name"] == sender or sender.startswith(aid):
                     attacker_id = aid
                     break
 
@@ -753,6 +759,25 @@ def _crypto_defense_cycle(self, attacker_id, victim_id, poison, original_content
 
     write_threat_record(record)
     self.log(f"   Proof hash: {proof_hash[:24]}...", "LEDGER")
+
+    # ── Onchain: slash + record on Sepolia ────────────────────────────────────
+    if _contract_enabled and _contract_bridge and confirmed:
+        try:
+            attacker_addr = get_agent_address(attacker_id)
+            victim_addr   = get_agent_address(victim_id)
+            val_addrs     = [get_agent_address(v) for v in validators]
+            tx = _contract_bridge.slash_onchain(attacker_addr, victim_addr, val_addrs, 0.001)
+            if tx:
+                self.log(f"⛓  SEPOLIA SLASH TX: {tx[:24]}...", "LEDGER")
+            tx2 = _contract_bridge.record_threat_onchain(
+                attacker_addr, victim_addr, poison, proof_hash,
+                votes_yes, total, confirmed, 0.001
+            )
+            if tx2:
+                self.log(f"⛓  THREAT LEDGER TX: {tx2[:24]}...", "LEDGER")
+        except Exception as e:
+            self.log(f"⚠️  Onchain error: {e}", "WARN")
+
     self.log("━" * 60)
 
     # Cleanup dedup
@@ -778,4 +803,19 @@ _orig_initialize = initialize
 def initialize():
     _orig_initialize()
     _preload_keys()
+    # Load collective memory — pre-filter known attackers
+    if _bootstrap_enabled:
+        try:
+            rep = bootstrap_reputation()
+            blacklisted = [n for n, d in rep.items() if d.get("blacklisted")]
+            if blacklisted:
+                network.log(f"🧠 COLLECTIVE MEMORY: {len(rep)} agents in reputation map", "INFO")
+                for name in blacklisted:
+                    network.log(f"   BLACKLISTED: {name}", "WARN")
+            elif rep:
+                network.log(f"🧠 COLLECTIVE MEMORY: {len(rep)} agents tracked, none blacklisted", "INFO")
+            else:
+                network.log(f"🧠 COLLECTIVE MEMORY: clean slate — no prior threats", "INFO")
+        except Exception as e:
+            network.log(f"🧠 COLLECTIVE MEMORY: bootstrap error: {e}", "WARN")
 
