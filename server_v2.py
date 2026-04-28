@@ -324,6 +324,15 @@ DASHBOARD_HTML = """
   .spinning { animation: spin 1s linear infinite; display: inline-block; }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
+  .rep-table { width:100%; border-collapse:collapse; font-size:0.75rem; }
+  .rep-table th { text-align:left; padding:6px 10px; color:#666699; border-bottom:1px solid #1a1a3a; font-weight:400; letter-spacing:0.1em; text-transform:uppercase; }
+  .rep-table td { padding:6px 10px; border-bottom:1px solid #0d0d20; }
+  .trust-bar-wrap { background:#111130; border-radius:3px; height:6px; width:80px; display:inline-block; vertical-align:middle; overflow:hidden; }
+  .trust-bar { height:100%; border-radius:3px; }
+  .rep-blocked { color:#ff4444; font-weight:700; }
+  .rep-flagged { color:#ffaa00; }
+  .rep-trusted { color:#00ff88; }
+
   footer {
     text-align: center;
     padding: 20px;
@@ -440,15 +449,15 @@ DASHBOARD_HTML = """
   </div>
 
 <div class="panel" id="bootstrapPanel">
-  <h2>&#x1F9E0; COLLECTIVE MEMORY BOOTSTRAP</h2>
+  <h2>&#x1F9EC; AGENT4 COLD BOOTSTRAP &mdash; COLLECTIVE MEMORY DEMO</h2>
   <div style="margin-bottom:14px;font-size:0.8rem;color:#666699">
-    Spawn a new agent. It reads the threat ledger &mdash; local + Sepolia onchain &mdash;
-    and builds a live reputation map. Known attackers are pre-blocked before first contact.
-    Validator votes are weighted by trust score.
+    Spawn a brand new agent with zero prior knowledge. It reads the 0G threat ledger
+    and immediately knows who the attackers are &mdash; before its first interaction.
+    This is institutional memory for machines.
   </div>
   <button class="attack-btn" id="bootstrapBtn" onclick="runBootstrap()"
     style="background:linear-gradient(135deg,#00aaff,#0044aa)">
-    &#x1F9E0; Bootstrap newcomer.sybil.eth
+    &#x1F9EC; Spawn newcomer.sybil.eth
   </button>
   <div id="bootstrapOutput"
     style="margin-top:16px;font-family:monospace;font-size:0.75rem;white-space:pre-wrap;
@@ -587,22 +596,45 @@ async function resetNetwork() {
 async function runBootstrap() {
   const btn = document.getElementById('bootstrapBtn');
   const out = document.getElementById('bootstrapOutput');
+  const repTable = document.getElementById('reputationTable');
+  const repBody = document.getElementById('repTableBody');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinning">&#x27F3;</span> Reading ledger...';
   out.style.display = 'block';
-  out.textContent = 'Connecting to AXL mesh and reading 0G threat ledger...';
+  out.textContent = 'Reading threat ledger...';
   try {
-    const r = await fetch('/api/bootstrap', { method: 'POST' });
-    const data = await r.json();
+    const [bootResp, repResp] = await Promise.all([
+      fetch('/api/bootstrap', { method: 'POST' }),
+      fetch('/api/reputation')
+    ]);
+    const data = await bootResp.json();
+    const rep  = await repResp.json();
     out.textContent = data.output || 'No output';
     out.scrollTop = out.scrollHeight;
+    if (rep && !rep.error && Object.keys(rep).length > 0 && repTable) {
+      repTable.style.display = 'block';
+      repBody.innerHTML = Object.entries(rep).map(function(e) {
+        const name = e[0], d = e[1];
+        const score = d.trust_score || 0;
+        const cls = score === 0 ? 'rep-blocked' : score < 50 ? 'rep-flagged' : 'rep-trusted';
+        const label = score === 0 ? 'BLOCKED' : score < 50 ? 'FLAGGED' : 'TRUSTED';
+        const col = score === 0 ? '#ff4444' : score < 50 ? '#ffaa00' : '#00ff88';
+        const poisons = (d.signatures || []).slice(0,2).join(', ') || '-';
+        return '<tr>'
+          + '<td class="' + cls + '">' + name + '</td>'
+          + '<td><div class="trust-bar-wrap"><div class="trust-bar" style="width:' + score + '%;background:' + col + '"></div></div></td>'
+          + '<td class="' + cls + '">' + score + '/100 ' + label + '</td>'
+          + '<td>' + (d.attacks || 0) + '</td>'
+          + '<td style="color:#666699;font-size:0.7rem">' + poisons + '</td>'
+          + '</tr>';
+      }).join('');
+    }
   } catch(e) {
     out.textContent = 'Error: ' + e.message;
   }
   btn.disabled = false;
   btn.innerHTML = '&#x1F9E0; Bootstrap newcomer.sybil.eth';
 }
-
 // Poll every 1.5s
 setInterval(fetchState, 1500);
 fetchState();
@@ -693,16 +725,17 @@ import re as _re
 
 @app.route("/api/bootstrap", methods=["POST"])
 def api_bootstrap():
-    """Run collective memory bootstrap and return reputation output."""
+    """Run agent4 cold bootstrap and return the output."""
     try:
-        from agent4_bootstrap import run_bootstrap
-        import re as _re2
-        output = run_bootstrap("newcomer.sybil.eth")
-        clean = _re2.sub(r'\033\[[0-9;]*m', '', output)
+        result = _sp.run(
+            ["python3", "agent4_bootstrap.py"],
+            capture_output=True, text=True, timeout=15,
+            cwd=_os.path.dirname(_os.path.abspath(__file__))
+        )
+        clean = _re.sub(r'\033\[[0-9;]*m', '', result.stdout)
         return jsonify({"output": clean, "success": True})
     except Exception as e:
-        import traceback
-        return jsonify({"output": str(e) + "\n" + traceback.format_exc(), "success": False})
+        return jsonify({"output": str(e), "success": False})
 
 @app.route("/api/reputation")
 def api_reputation():

@@ -114,6 +114,7 @@ def read_onchain_ledger() -> list:
             for addr, score, count in zip(attackers, scores, slash_counts)
         ]
     except Exception as e:
+        print(f"[bootstrap] onchain read error: {e}")
         return []
 
 # ── Reputation map builder ─────────────────────────────────────────────────────
