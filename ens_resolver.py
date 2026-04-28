@@ -75,7 +75,7 @@ def _build_indexes():
 _build_indexes()
 
 # ── Onchain resolver (Sepolia) ─────────────────────────────────────────────────
-REGISTRY_ADDRESS = os.getenv("SYBIL_REGISTRY_ADDRESS", "0xeDa95B16CdbE1b0617A7233aC0204D0eB092223d")
+REGISTRY_ADDRESS = os.getenv("SYBIL_REGISTRY_ADDRESS", "0xf95F7dd71EB7D4C94a97dAb58BBd2E92A0809a27")
 SEPOLIA_RPC      = os.getenv("SEPOLIA_RPC_URL", "")
 
 _onchain_cache = {}  # ens_name → onchain data

@@ -4,7 +4,8 @@
   "deployer": "0x2F7E204F76D47ea69F91Eae548C7C5B39B0Fc1c6",
   "contracts": {
     "ThreatLedger": "0x8A208055787db8B9D399a4D59aBDFF54fB9Ba35B",
-    "SYBILRegistry": "0xeDa95B16CdbE1b0617A7233aC0204D0eB092223d",
+    "SYBILRegistry": "0xf95F7dd71EB7D4C94a97dAb58BBd2E92A0809a27",
     "SlashingVault": "0x9fF5A06A828E9115986FC1EC8bAf92fa2182aF20"
-  }
+  },
+  "updatedAt": "2026-04-28T20:05:38.103Z"
 }

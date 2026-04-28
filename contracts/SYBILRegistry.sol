@@ -7,7 +7,6 @@ pragma solidity ^0.8.20;
  *         Agents register with an ENS name + AXL public key and deposit stake.
  *         Stake is locked in SlashingVault. Registry tracks agent metadata and status.
  *
- * ETHGlobal Open Agents 2026 | Andrea Amenta
  */
 
 interface ISlashingVault {
@@ -128,6 +127,42 @@ contract SYBILRegistry {
         vault.deposit{value: msg.value}(msg.sender);
 
         emit AgentRegistered(msg.sender, ensName, axlPubKey, role);
+    }
+
+    /**
+     * @notice Owner registers an agent on behalf of an address (for multi-agent same-wallet setups).
+     * @dev Used when multiple agents share one funding wallet (hackathon convenience).
+     */
+    function adminRegister(
+        address agentAddr,
+        string calldata ensName,
+        bytes32 axlPubKey,
+        AgentRole role
+    ) external payable onlyOwner {
+        require(!agents[agentAddr].exists,            "Already registered");
+        require(msg.value >= MIN_STAKE,               "Insufficient stake");
+        require(bytes(ensName).length > 0,            "Empty ENS name");
+        require(ensToAddress[ensName] == address(0),  "ENS name taken");
+        require(address(vault) != address(0),         "Vault not set");
+
+        agents[agentAddr] = Agent({
+            ensName:         ensName,
+            axlPubKey:       axlPubKey,
+            role:            role,
+            status:          AgentStatus.Active,
+            attacksDetected: 0,
+            attacksLaunched: 0,
+            votesCast:       0,
+            registeredAt:    block.timestamp,
+            exists:          true
+        });
+
+        ensToAddress[ensName]   = agentAddr;
+        if (axlPubKey != bytes32(0)) axlToAddress[axlPubKey] = agentAddr;
+        agentList.push(agentAddr);
+
+        vault.deposit{value: msg.value}(agentAddr);
+        emit AgentRegistered(agentAddr, ensName, axlPubKey, role);
     }
 
     // ── Called by Vault after slash ────────────────────────────────────────────
