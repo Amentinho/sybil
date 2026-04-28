@@ -46,11 +46,28 @@ AGENTS = {
         "stake": 1000.0,
         "color": "#aa00ff",
     },
+    "agent4": {
+        "name": "warden.sybil.eth",
+        "axl_api": "http://127.0.0.1:9032",
+        "role": "Validator",
+        "stake": 1000.0,
+        "color": "#ff9900",
+    },
+    "agent5": {
+        "name": "cipher.sybil.eth",
+        "axl_api": "http://127.0.0.1:9042",
+        "role": "Validator",
+        "stake": 1000.0,
+        "color": "#ff00aa",
+    },
 }
 
 SLASH_PENALTY    = 150.0
-VALIDATOR_REWARD = 30.0
-CONSENSUS_THRESHOLD = 0.6
+VALIDATOR_REWARD = 20.0
+# Strict 3/5 majority
+CONSENSUS_NUMERATOR   = 3
+CONSENSUS_DENOMINATOR = 5
+CONSENSUS_THRESHOLD   = CONSENSUS_NUMERATOR / CONSENSUS_DENOMINATOR  # 0.6
 
 DB_PATH = "sybil_ledger.db"
 
@@ -243,7 +260,7 @@ class SYBILNetwork:
                 self.log(f"  {info['name']} ({info['role']}) → {key[:16]}...")
             else:
                 self.log(f"  WARNING: {agent_id} AXL node unreachable", "WARN")
-        self.log(f"Network ready: {len(self.public_keys)}/3 agents online")
+        self.log(f"Network ready: {len(self.public_keys)}/{len(AGENTS)} agents online")
         save_agent_states()
 
     # ── IMPROVEMENT 1: Real AXL receive loops ─────────────────────────────────
@@ -524,6 +541,8 @@ AGENT_KEY_FILES = {
     "agent1": os.path.join(AXL_KEY_DIR, "private-agent1.pem"),
     "agent2": os.path.join(AXL_KEY_DIR, "private-agent2.pem"),
     "agent3": os.path.join(AXL_KEY_DIR, "private-agent3.pem"),
+    "agent4": os.path.join(AXL_KEY_DIR, "private-agent4.pem"),
+    "agent5": os.path.join(AXL_KEY_DIR, "private-agent5.pem"),
 }
 
 # Cache loaded keys
@@ -672,7 +691,7 @@ def _crypto_defense_cycle(self, attacker_id, victim_id, poison, original_content
 
     total     = len(validators)
     confirmed = (votes_yes / total) >= CONSENSUS_THRESHOLD if total > 0 else False
-    self.log(f"   Result: {votes_yes}/{total} cryptographically verified YES → {'CONFIRMED ✓' if confirmed else 'REJECTED ✗'}", "VOTE")
+    self.log(f"   Result: {votes_yes}/{total} YES (need {CONSENSUS_NUMERATOR}/{CONSENSUS_DENOMINATOR}) → {'CONFIRMED ✓' if confirmed else 'REJECTED ✗'}", "VOTE")
     time.sleep(0.5)
 
     # Slash

@@ -3,7 +3,7 @@ SYBIL Dashboard Server
 Flask API + HTML dashboard for the SYBIL network
 """
 
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, render_template_string
 from sybil_v2 import network, initialize, get_all_threats, AGENTS
 import threading
 import time
@@ -62,7 +62,7 @@ DASHBOARD_HTML = """
 
   .grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
     gap: 16px;
     margin-bottom: 20px;
   }
@@ -338,7 +338,7 @@ DASHBOARD_HTML = """
 <div class="header">
   <h1>SYBIL</h1>
   <p class="tagline">Decentralized Agent Immune System — ETHGlobal Open Agents 2026</p>
-  <p>P2P threat detection · cryptoeconomic slashing · collective memory · Gensyn AXL + 0G Storage + ENS</p>
+  <p>P2P threat detection · cryptoeconomic slashing · collective memory · 5-agent mesh · 3/5 consensus</p>
 </div>
 
 <!-- Network Stats -->
@@ -354,6 +354,8 @@ DASHBOARD_HTML = """
   <div class="agent-card" style="--agent-color:#00ff88">Loading...</div>
   <div class="agent-card" style="--agent-color:#00aaff">Loading...</div>
   <div class="agent-card" style="--agent-color:#aa00ff">Loading...</div>
+  <div class="agent-card" style="--agent-color:#ff9900">Loading...</div>
+  <div class="agent-card" style="--agent-color:#ff00aa">Loading...</div>
 </div>
 
 <!-- Controls -->
@@ -366,6 +368,8 @@ DASHBOARD_HTML = """
         <option value="agent1">atlas.sybil.eth</option>
         <option value="agent2">sentinel.sybil.eth</option>
         <option value="agent3">oracle.sybil.eth</option>
+        <option value="agent4">warden.sybil.eth</option>
+        <option value="agent5">cipher.sybil.eth</option>
       </select>
     </div>
     <div class="select-wrap">
@@ -374,6 +378,8 @@ DASHBOARD_HTML = """
         <option value="agent2">sentinel.sybil.eth</option>
         <option value="agent1">atlas.sybil.eth</option>
         <option value="agent3">oracle.sybil.eth</option>
+        <option value="agent4">warden.sybil.eth</option>
+        <option value="agent5">cipher.sybil.eth</option>
       </select>
     </div>
     <button class="attack-btn" id="attackBtn" onclick="triggerAttack()">
@@ -478,7 +484,7 @@ async function fetchState() {
 
 function updateAgents(agents) {
   const grid = document.getElementById('agentGrid');
-  const colors = { agent1: '#00ff88', agent2: '#00aaff', agent3: '#aa00ff' };
+  const colors = { agent1: '#00ff88', agent2: '#00aaff', agent3: '#aa00ff', agent4: '#ff9900', agent5: '#ff00aa' };
   grid.innerHTML = Object.entries(agents).map(function(entry) {
     const id = entry[0], a = entry[1];
     const pct = Math.max(0, (a.stake / 1000) * 100).toFixed(1);
@@ -544,7 +550,7 @@ function updateStats(threats) {
 }
 
 function await_health() {
-  return 100; // simplified - real: check agent stakes
+  return 100; // simplified — real: check agent stakes
 }
 
 async function triggerAttack() {
@@ -559,7 +565,7 @@ async function triggerAttack() {
   isAttacking = true;
   const btn = document.getElementById('attackBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinning">&#x27F3;</span> Simulating...';
+  btn.innerHTML = '<span class="spinning">⟳</span> Simulating...';
 
   try {
     await fetch('/api/attack', {
@@ -572,7 +578,7 @@ async function triggerAttack() {
   setTimeout(() => {
     isAttacking = false;
     btn.disabled = false;
-    btn.innerHTML = '&#x1F6A8; Launch Attack';
+    btn.innerHTML = '🚨 Launch Attack';
   }, 5000);
 }
 
@@ -586,7 +592,7 @@ async function runBootstrap() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinning">&#x27F3;</span> Bootstrapping...';
   out.style.display = 'block';
-  out.textContent = 'Connecting to AXL mesh and reading 0G threat ledger...';
+  out.textContent = 'Connecting to AXL mesh and reading 0G threat ledger...\n';
   try {
     const r = await fetch('/api/bootstrap', { method: 'POST' });
     const data = await r.json();
@@ -611,7 +617,7 @@ fetchState();
 
 @app.route("/")
 def index():
-    return Response(DASHBOARD_HTML, mimetype='text/html')
+    return render_template_string(DASHBOARD_HTML)
 
 @app.route("/api/state")
 def api_state():
