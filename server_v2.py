@@ -3,7 +3,7 @@ SYBIL Dashboard Server
 Flask API + HTML dashboard for the SYBIL network
 """
 
-from flask import Flask, jsonify, request, render_template_string
+from flask import Flask, jsonify, request, Response
 from sybil_v2 import network, initialize, get_all_threats, AGENTS
 import threading
 import time
@@ -62,7 +62,7 @@ DASHBOARD_HTML = """
 
   .grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: repeat(5, 1fr);
     gap: 16px;
     margin-bottom: 20px;
   }
@@ -550,7 +550,7 @@ function updateStats(threats) {
 }
 
 function await_health() {
-  return 100; // simplified — real: check agent stakes
+  return 100; // simplified - real: check agent stakes
 }
 
 async function triggerAttack() {
@@ -565,7 +565,7 @@ async function triggerAttack() {
   isAttacking = true;
   const btn = document.getElementById('attackBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinning">⟳</span> Simulating...';
+  btn.innerHTML = '<span class="spinning">&#x27F3;</span> Simulating...';
 
   try {
     await fetch('/api/attack', {
@@ -578,7 +578,7 @@ async function triggerAttack() {
   setTimeout(() => {
     isAttacking = false;
     btn.disabled = false;
-    btn.innerHTML = '🚨 Launch Attack';
+    btn.innerHTML = '&#x1F6A8; Launch Attack';
   }, 5000);
 }
 
@@ -592,7 +592,7 @@ async function runBootstrap() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinning">&#x27F3;</span> Bootstrapping...';
   out.style.display = 'block';
-  out.textContent = 'Connecting to AXL mesh and reading 0G threat ledger...\n';
+  out.textContent = 'Connecting to AXL mesh and reading 0G threat ledger...';
   try {
     const r = await fetch('/api/bootstrap', { method: 'POST' });
     const data = await r.json();
@@ -617,7 +617,7 @@ fetchState();
 
 @app.route("/")
 def index():
-    return render_template_string(DASHBOARD_HTML)
+    return Response(DASHBOARD_HTML, mimetype='text/html')
 
 @app.route("/api/state")
 def api_state():

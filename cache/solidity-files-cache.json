@@ -1,0 +1,116 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "/Users/andreaamenta/Projects/sybil/contracts/SYBILRegistry.sol": {
+      "lastModificationDate": 1777303471485,
+      "contentHash": "c42072e2ec4f61d387f0850bf420e555",
+      "sourceName": "contracts/SYBILRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ISlashingVault",
+        "SYBILRegistry"
+      ]
+    },
+    "/Users/andreaamenta/Projects/sybil/contracts/SlashingVault.sol": {
+      "lastModificationDate": 1777303519301,
+      "contentHash": "346eb15b67b7cbba346c9ddc2c053319",
+      "sourceName": "contracts/SlashingVault.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ISYBILRegistry",
+        "IThreatLedger",
+        "SlashingVault"
+      ]
+    },
+    "/Users/andreaamenta/Projects/sybil/contracts/ThreatLedger.sol": {
+      "lastModificationDate": 1777303471487,
+      "contentHash": "59e0d5183386c5610c39abcec607cb94",
+      "sourceName": "contracts/ThreatLedger.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ThreatLedger"
+      ]
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IThreatLedger",
+  "sourceName": "contracts/SlashingVault.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "attacker",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "victim",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "poisonSignature",
+          "type": "string"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "proofHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "consensusVotes",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "consensusTotal",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "slashed",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "slashAmount",
+          "type": "uint256"
+        }
+      ],
+      "name": "recordThreat",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

@@ -1,0 +1,38 @@
+{
+  "name": "SYBIL — Decentralized Agent Immune System",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "forwardPorts": [5001, 9002, 9012, 9022, 9032, 9042],
+
+  "portsAttributes": {
+    "5001": {
+      "label": "SYBIL Dashboard",
+      "onAutoForward": "openBrowser"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "NomicFoundation.hardhat-solidity",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python3",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  "remoteEnv": {
+    "PYTHONUNBUFFERED": "1"
+  }
+}

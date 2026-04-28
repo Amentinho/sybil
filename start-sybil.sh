@@ -5,7 +5,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AXL_DIR="$HOME/Projects/axl"
-AXL_BIN="$AXL_DIR/axl-node"
+AXL_BIN="$AXL_DIR/node"
 
 # Colors
 GREEN='\033[0;32m'

@@ -23,6 +23,26 @@ import subprocess
 import os
 from typing import Optional
 
+# Contract bridge — graceful fallback if not configured
+try:
+    from contract_bridge import bridge as _contract_bridge
+except ImportError:
+    _contract_bridge = None
+
+# Novel attack generator and semantic detector
+try:
+    from novel_attacks import (
+        generate_novel_attack,
+        detect_poison_semantic,
+        get_detection_stats,
+        attack_generator as _attack_gen
+    )
+    _novel_attacks_enabled = True
+except ImportError:
+    _novel_attacks_enabled = False
+    def detect_poison_semantic(msg): return None
+    def generate_novel_attack(): return None
+
 # ── AXL node endpoints ────────────────────────────────────────────────────────
 AGENTS = {
     "agent1": {
@@ -205,10 +225,19 @@ def generate_proof(attacker_name: str, victim_id: str, poison: str, timestamp: s
     return hashlib.sha256(raw.encode()).hexdigest()
 
 def detect_poison(message: str) -> Optional[str]:
+    """
+    Two-stage detection:
+    1. Exact match against known signatures (fast)
+    2. Semantic analysis for novel attacks (IMPROVEMENT 5)
+    """
     msg = message.lower()
+    # Stage 1: exact match
     for sig in POISON_SIGNATURES:
         if sig in msg:
             return sig
+    # Stage 2: semantic / pattern detection
+    if _novel_attacks_enabled:
+        return detect_poison_semantic(message)
     return None
 
 # ── 0G Storage ────────────────────────────────────────────────────────────────
@@ -458,7 +487,12 @@ class SYBILNetwork:
         """
         attacker = AGENTS[attacker_id]
         victim   = AGENTS[victim_id]
-        poison   = random.choice(POISON_SIGNATURES)
+        # 30% chance of novel AI-generated attack (IMPROVEMENT 5)
+        if _novel_attacks_enabled and random.random() < 0.3:
+            novel = generate_novel_attack()
+            poison = novel if novel else random.choice(POISON_SIGNATURES)
+        else:
+            poison = random.choice(POISON_SIGNATURES)
 
         message = {
             "type":      "task_request",
@@ -736,6 +770,38 @@ def _crypto_defense_cycle(self, attacker_id, victim_id, poison, original_content
 
     write_threat_record(record)
     self.log(f"   Proof hash: {proof_hash[:24]}...", "LEDGER")
+
+    # ── IMPROVEMENT 4: Onchain slash via SlashingVault.sol ────────────────────
+    if _contract_bridge and confirmed:
+        try:
+            # Map agent names to Ethereum addresses (deployer owns all for now)
+            DEPLOYER = "0x2F7E204F76D47ea69F91Eae548C7C5B39B0Fc1c6"
+            tx = _contract_bridge.slash_onchain(
+                attacker_addr=DEPLOYER,
+                victim_addr=DEPLOYER,
+                validator_addrs=[DEPLOYER],
+                amount_eth=0.001
+            )
+            if tx:
+                self.log(f"⛓  ONCHAIN SLASH: Sepolia TX {tx[:20]}...", "LEDGER")
+                record["sepolia_tx"] = tx
+
+            # Record threat in ThreatLedger.sol
+            tx2 = _contract_bridge.record_threat_onchain(
+                attacker_addr=DEPLOYER,
+                victim_addr=DEPLOYER,
+                poison=poison,
+                proof_hash_hex=proof_hash,
+                votes_for=votes_yes,
+                votes_total=total,
+                slashed=confirmed,
+                slash_amount_eth=0.001
+            )
+            if tx2:
+                self.log(f"⛓  THREAT LEDGER: Sepolia TX {tx2[:20]}...", "LEDGER")
+        except Exception as e:
+            self.log(f"⚠️  Onchain bridge error: {e}", "WARN")
+
     self.log("━" * 60)
 
     # Cleanup dedup

@@ -1,0 +1,10 @@
+{
+  "network": "sepolia",
+  "deployedAt": "2026-04-27T15:41:00.749Z",
+  "deployer": "0x2F7E204F76D47ea69F91Eae548C7C5B39B0Fc1c6",
+  "contracts": {
+    "ThreatLedger": "0x8A208055787db8B9D399a4D59aBDFF54fB9Ba35B",
+    "SYBILRegistry": "0xeDa95B16CdbE1b0617A7233aC0204D0eB092223d",
+    "SlashingVault": "0x9fF5A06A828E9115986FC1EC8bAf92fa2182aF20"
+  }
+}
