@@ -10,13 +10,11 @@
 
 As AI agents proliferate and form autonomous networks, they become targets for **prompt injection**, identity spoofing, and coordinated manipulation. Existing defenses are siloed — each agent protects only itself, and when it's gone, its threat intelligence dies with it.
 
-A new agent joining the network today starts completely blind — no memory of past attacks, no knowledge of bad actors, no inherited immunity.
-
 ## The Solution
 
-SYBIL is a **decentralized immune system** for AI agent networks. When one agent detects a prompt injection attack over the Gensyn AXL P2P mesh, it broadcasts a cryptographically signed Proof of Attack to validator agents. They vote via ed25519 signatures — if consensus is reached, the attacker is **slashed onchain** via Ethereum smart contracts. The threat is permanently recorded on 0G Storage and in `ThreatLedger.sol`.
+SYBIL is a **decentralized immune system** for AI agent networks. When one agent detects a prompt injection attack over the Gensyn AXL P2P mesh, it broadcasts a cryptographically signed Proof of Attack to validator agents. They vote via ed25519 signatures — if **3/5 strict majority** is reached, the attacker is **slashed onchain** via Ethereum smart contracts. The threat is permanently recorded on 0G Storage and in `ThreatLedger.sol`.
 
-New agents bootstrap with zero prior knowledge by calling `ThreatLedger.getBootstrapData()` — immediately knowing who the attackers are before their first interaction.
+New agents bootstrap by calling `ThreatLedger.getBootstrapData()` — immediately knowing who the attackers are, pre-blocking them, and weighting validator votes by trust score.
 
 **This is institutional memory for machines.**
 
@@ -26,8 +24,7 @@ New agents bootstrap with zero prior knowledge by calling `ThreatLedger.getBoots
 
 ```bash
 git clone https://github.com/Amentinho/sybil
-cd sybil
-pip install flask requests cryptography python-dotenv
+cd sybil && pip install flask requests cryptography python-dotenv web3
 bash start-sybil.sh
 # Open http://127.0.0.1:5001
 ```
@@ -37,96 +34,62 @@ bash start-sybil.sh
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        SYBIL Network                            │
-│                                                                 │
-│   atlas.sybil.eth      sentinel.sybil.eth     oracle.sybil.eth  │
-│   [Guardian]           [Validator]            [Validator]       │
-│        │                    │                      │            │
-│        └────────────────────┴──────────────────────┘            │
-│                      Gensyn AXL P2P Mesh                        │
-│               (real TCP · tls://34.46.48.224:9001)              │
-└─────────────────────────────────────────────────────────────────┘
-          │                                          │
-          ▼                                          ▼
-   0G Storage Testnet                      Ethereum Sepolia
-   (threat records +               ┌──────────────────────────┐
-    TX hashes onchain)             │   SYBILRegistry.sol      │
-                                   │   SlashingVault.sol      │
-                                   │   ThreatLedger.sol       │
-                                   └──────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                  SYBIL Network — 5 agents                   │
+│                                                             │
+│  atlas.sybil.eth   sentinel   oracle   warden   cipher      │
+│  [Guardian]        [Validator x 4]                          │
+│       │                 │         │       │        │        │
+│       └─────────────────┴─────────┴───────┴────────┘        │
+│                  Gensyn AXL P2P Mesh (real TCP)             │
+└─────────────────────────────────────────────────────────────┘
+         │                                      │
+         ▼                                      ▼
+  0G Storage Testnet               Ethereum Sepolia (verified)
+  (threat records)             SYBILRegistry · SlashingVault
+                                     ThreatLedger
 ```
 
-### Attack and Defense Flow
+### Attack Flow
 
 ```
-1.  attacker sends poison message to victim over AXL P2P mesh
-         ↓
-2.  victim auto-detects poison → generates Proof of Attack
-         keccak256(attacker + victim + poison + timestamp)
-         ↓
-3.  victim broadcasts signed proof to validators over AXL
-         ↓
-4.  validators sign YES/NO votes with ed25519 private keys
-         ↓
-5.  3/5 consensus reached → CONFIRMED
-         ↓
-6.  SlashingVault.slash() executes onchain
-         attacker loses ETH stake
-         30% distributed to YES validators as reward
-         ↓
-7.  ThreatLedger.recordThreat() writes immutable onchain record
-    + 0G Storage upload with TX hash
-         ↓
-8.  newcomer.sybil.eth calls ThreatLedger.getBootstrapData()
-    → inherits collective memory, blacklists known attackers
-    → immune before first interaction
+1. attacker sends poison → AXL mesh
+2. collective memory pre-filter: blacklisted? → REJECT instantly
+3. victim detects poison → Proof of Attack (keccak256 hash)
+4. broadcast to 4 validators over AXL
+5. validators sign YES/NO with ed25519 keys
+   votes weighted by trust score
+6. 3/5 majority → CONFIRMED
+7. SlashingVault.slash() onchain → attacker loses ETH
+   30% to validators as reward
+8. ThreatLedger.recordThreat() → immutable record + 0G upload
+9. newcomer.getBootstrapData() → inherits collective memory
 ```
 
 ---
 
-## Smart Contracts — Sepolia Testnet
+## Smart Contracts — Sepolia (All Verified ✓)
 
-| Contract | Address | Purpose |
-|----------|---------|---------|
-| `SYBILRegistry` | [`0xeDa95B16CdbE1b0617A7233aC0204D0eB092223d`](https://sepolia.etherscan.io/address/0xeDa95B16CdbE1b0617A7233aC0204D0eB092223d) | Agent registration: ENS name + AXL pubkey + ETH stake |
-| `SlashingVault` | [`0x9fF5A06A828E9115986FC1EC8bAf92fa2182aF20`](https://sepolia.etherscan.io/address/0x9fF5A06A828E9115986FC1EC8bAf92fa2182aF20) | Holds ETH stakes, executes slashing, rewards validators |
-| `ThreatLedger` | [`0x8A208055787db8B9D399a4D59aBDFF54fB9Ba35B`](https://sepolia.etherscan.io/address/0x8A208055787db8B9D399a4D59aBDFF54fB9Ba35B) | Immutable threat history + trust scores + bootstrap data |
+| Contract | Address | Source |
+|----------|---------|--------|
+| `SYBILRegistry` | `0xf95F7dd71EB7D4C94a97dAb58BBd2E92A0809a27` | [Etherscan ↗](https://sepolia.etherscan.io/address/0xf95F7dd71EB7D4C94a97dAb58BBd2E92A0809a27#code) |
+| `SlashingVault` | `0x9fF5A06A828E9115986FC1EC8bAf92fa2182aF20` | [Etherscan ↗](https://sepolia.etherscan.io/address/0x9fF5A06A828E9115986FC1EC8bAf92fa2182aF20#code) |
+| `ThreatLedger`  | `0x8A208055787db8B9D399a4D59aBDFF54fB9Ba35B` | [Etherscan ↗](https://sepolia.etherscan.io/address/0x8A208055787db8B9D399a4D59aBDFF54fB9Ba35B#code) |
 
-**Deployer:** `0x2F7E204F76D47ea69F91Eae548C7C5B39B0Fc1c6`
-**Network:** Ethereum Sepolia
-**Stake per agent:** 0.01 ETH
-
-### SYBILRegistry.sol
-Agents register with an ENS name (`atlas.sybil.eth`), their Gensyn AXL ed25519 public key (32 bytes), and a minimum 0.01 ETH stake. Tracks agent status (Active → Warned → Banned) and attack/detection history.
-
-### SlashingVault.sol
-Holds all agent stakes in ETH. On consensus, slashes the attacker: 70% burned as economic disincentive, 30% distributed to validators who voted YES. Banned agents cannot withdraw their remaining stake.
-
-### ThreatLedger.sol
-Permanent immutable log of every verified attack — poison signatures, proof hashes, consensus votes, slash amounts, trust scores (0–100, decremented by 35 per slash). `getBootstrapData()` returns the full reputation map for cold bootstrap.
+**All 5 agents registered with real ETH stakes on Sepolia.**
 
 ---
 
 ## Improvements Built
 
-### Improvement 1 — Real AXL Receive Loops
-Agents communicate over real Gensyn AXL TCP connections to the public mesh at `tls://34.46.48.224:9001`. Messages are delivered peer-to-peer. Each agent runs a live background listener that auto-triggers the full defense cycle when poison is detected in an incoming message.
-
-### Improvement 2 — ed25519 Cryptographic Signatures
-Every validator vote is signed with the agent's ed25519 private key and cryptographically verified before counting toward consensus. Proof hashes are `keccak256(attacker + victim + poison + timestamp)`. Fake votes are rejected.
-
-### Improvement 3 — Agent4 Cold Bootstrap (Collective Memory)
-A brand new agent with zero prior history calls `ThreatLedger.getBootstrapData()` and immediately knows which agents have attacked, what poison signatures they used, and their current trust score. Demo output:
-
-```
-Bootstrap complete. newcomer.sybil.eth is now immune-aware.
-This agent learned from 8 past attacks without ever being attacked itself.
-This is collective memory. This is SYBIL.
-```
-
-### Improvement 4 — Smart Contracts on Sepolia
-Real cryptoeconomic slashing. Agent stakes are held in `SlashingVault.sol`. After AXL consensus, `slash()` is called onchain — attacker loses real ETH (testnet), validators earn rewards. `ThreatLedger.sol` provides an immutable onchain record any agent can query at any time.
+| # | Feature | Status |
+|---|---------|--------|
+| 1 | Real AXL receive loops — autonomous defense | ✅ |
+| 2 | ed25519 cryptographic vote signatures | ✅ |
+| 3 | Collective memory bootstrap — onchain + local | ✅ |
+| 4 | Smart contracts + real ETH staking + verified Etherscan | ✅ |
+| 5 | Novel AI attacks + semantic poison detector | ✅ |
+| 6 | ENS identity layer via SYBILRegistry | ✅ |
 
 ---
 
@@ -134,16 +97,15 @@ Real cryptoeconomic slashing. Agent stakes are held in `SlashingVault.sol`. Afte
 
 | Layer | Technology |
 |-------|-----------|
-| P2P Mesh | Gensyn AXL (real TCP, public mesh) |
+| P2P Mesh | Gensyn AXL (5 real TCP nodes, public mesh) |
 | Cryptography | ed25519 keypairs, keccak256 proof hashes |
-| Decentralized Storage | 0G Storage testnet (TX hashes onchain) |
-| Smart Contracts | Solidity 0.8.20, Ethereum Sepolia |
-| Contract Tooling | Hardhat, Ethers.js |
+| Storage | 0G Storage testnet (TX hashes onchain) |
+| Smart Contracts | Solidity 0.8.20, Sepolia, verified Etherscan |
+| Tooling | Hardhat, Ethers.js, web3.py |
 | Backend | Python 3, Flask |
-| Contract Bridge | web3.py |
-| Dashboard | Vanilla JS, HTML/CSS |
-| Agent Identity | ENS-style naming via SYBILRegistry |
-| Database | SQLite (local 0G Storage mirror) |
+| Novel Attacks | GPT-4o-mini + 10-category semantic detector |
+| Identity | ENS-style naming, SYBILRegistry.sol |
+| Dev Environment | GitHub Codespaces (.devcontainer) |
 
 ---
 
@@ -151,72 +113,58 @@ Real cryptoeconomic slashing. Agent stakes are held in `SlashingVault.sol`. Afte
 
 ```
 sybil/
-├── sybil_v2.py              # Core: agents, AXL mesh, consensus, slashing
+├── sybil_v2.py              # Core: 5 agents, AXL, 3/5 consensus
 ├── server_v2.py             # Flask API + live dashboard
-├── agent4_bootstrap.py      # Cold bootstrap — collective memory demo
-├── contract_bridge.py       # Python to Ethereum contract integration
-├── og_storage.js            # 0G Storage upload/download
-├── start-sybil.sh           # Starts all AXL nodes + Flask dashboard
+├── agent4_bootstrap.py      # Collective memory (onchain + local)
+├── novel_attacks.py         # AI attack generator + semantic detector
+├── ens_resolver.py          # ENS resolution via SYBILRegistry.sol
+├── contract_bridge.py       # Python → Ethereum integration
+├── og_storage.js            # 0G Storage
+├── start-sybil.sh           # Start all 5 AXL nodes + dashboard
 ├── contracts/
-│   ├── SYBILRegistry.sol    # Agent registration + ENS + AXL pubkeys
-│   ├── SlashingVault.sol    # ETH stake vault + slashing + rewards
-│   └── ThreatLedger.sol     # Immutable threat log + bootstrap data
+│   ├── SYBILRegistry.sol    # Registration + ENS + adminRegister
+│   ├── SlashingVault.sol    # ETH stakes + 3/5 slashing + rewards
+│   └── ThreatLedger.sol     # Immutable log + trust scores + bootstrap
 ├── scripts/
-│   ├── deploy.js            # Hardhat deployment script
-│   └── register_agents.js  # Register agents onchain with ETH stake
-└── hardhat.config.js        # Hardhat config (Sepolia + localhost)
+│   ├── deploy.js
+│   ├── register_all_agents.js
+│   └── verify_contracts.js
+└── .devcontainer/           # GitHub Codespaces auto-setup
 ```
 
 ---
 
 ## Setup
 
-### Requirements
 ```bash
 pip install flask requests cryptography python-dotenv web3
 npm install
 ```
 
-### Environment Variables
 ```env
-OG_PRIVATE_KEY=your_key
+OG_PRIVATE_KEY=
 SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_KEY
 DEPLOYER_PRIVATE_KEY=0x...
-SYBIL_REGISTRY_ADDRESS=0xeDa95B16CdbE1b0617A7233aC0204D0eB092223d
+SYBIL_REGISTRY_ADDRESS=0xf95F7dd71EB7D4C94a97dAb58BBd2E92A0809a27
 SYBIL_VAULT_ADDRESS=0x9fF5A06A828E9115986FC1EC8bAf92fa2182aF20
 SYBIL_LEDGER_ADDRESS=0x8A208055787db8B9D399a4D59aBDFF54fB9Ba35B
-```
-
-### Run
-```bash
-bash start-sybil.sh
-# Dashboard: http://127.0.0.1:5001
-```
-
-### Agent4 Bootstrap Demo
-```bash
-python3 agent4_bootstrap.py
 ```
 
 ---
 
 ## Partner Technologies
 
-**Gensyn AXL** — All agent communication runs over Gensyn's AXL P2P mesh. Three agents maintain persistent TCP connections to the public mesh. The entire immune response is triggered by real AXL message events.
+**Gensyn AXL** — All 5 agents maintain real TCP connections to the public AXL mesh. The entire immune response is triggered by live AXL message events.
 
-**0G Storage** — Every verified threat is uploaded to 0G Storage testnet after consensus. TX hashes are displayed live in the dashboard and cross-verified in `ThreatLedger.sol`.
+**0G Storage** — Every verified threat is uploaded to 0G testnet after consensus. TX hashes shown live in dashboard and cross-verified in ThreatLedger.sol.
 
-**ENS** — Agent identities use ENS-style names registered in `SYBILRegistry.sol`, mapping names to AXL public keys and Ethereum addresses.
+**ENS** — All 5 agent identities use ENS-style names in SYBILRegistry.sol, mapping to AXL public keys and Ethereum addresses. Resolved at runtime via `/api/ens`.
 
 ---
 
 ## Built With
 
-- [Gensyn AXL](https://docs.gensyn.ai/tech/agent-exchange-layer) — P2P agent mesh
-- [0G Storage](https://0g.ai) — Decentralized storage
-- [Ethereum Sepolia](https://ethereum.org) — Smart contract execution
-- [Hardhat](https://hardhat.org) — Contract development and deployment
-- [Claude](https://claude.ai) (Anthropic) — AI-assisted development
+[Gensyn AXL](https://docs.gensyn.ai/tech/agent-exchange-layer) · [0G Storage](https://0g.ai) · [Ethereum](https://ethereum.org) · [Hardhat](https://hardhat.org) · [Claude](https://claude.ai) (Anthropic)
 
 ---
 
