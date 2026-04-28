@@ -62,7 +62,7 @@ DASHBOARD_HTML = """
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 16px;
     margin-bottom: 20px;
   }
@@ -338,7 +338,7 @@ DASHBOARD_HTML = """
 <div class="header">
   <h1>SYBIL</h1>
   <p class="tagline">Decentralized Agent Immune System — ETHGlobal Open Agents 2026</p>
-  <p>P2P threat detection · cryptoeconomic slashing · collective memory · 5-agent mesh · 3/5 consensus</p>
+  <p>P2P threat detection · cryptoeconomic slashing · collective memory · Gensyn AXL + 0G Storage + ENS</p>
 </div>
 
 <!-- Network Stats -->
@@ -354,8 +354,6 @@ DASHBOARD_HTML = """
   <div class="agent-card" style="--agent-color:#00ff88">Loading...</div>
   <div class="agent-card" style="--agent-color:#00aaff">Loading...</div>
   <div class="agent-card" style="--agent-color:#aa00ff">Loading...</div>
-  <div class="agent-card" style="--agent-color:#ff9900">Loading...</div>
-  <div class="agent-card" style="--agent-color:#ff00aa">Loading...</div>
 </div>
 
 <!-- Controls -->
@@ -425,10 +423,11 @@ DASHBOARD_HTML = """
 
   <div class="two-col">
     <div class="panel">
-      <h2>🌐 0G Storage Status</h2>
+      <h2>&#x1F310; 0G Storage + ENS Registry</h2>
       <div id="ogStatus" style="font-size:0.8rem;color:#666699;padding:10px 0">
-        Checking 0G Storage connection...
+        Checking connections...
       </div>
+      <div id="ensStatus" style="margin-top:10px;font-size:0.75rem"></div>
     </div>
     <div class="panel">
       <h2>🔗 Quick Links</h2>
@@ -480,8 +479,13 @@ async function fetchState() {
     updateThreats(threats);
     updateStats(threats);
   } catch(e) {}
-}
 
+  try {
+    const r3 = await fetch('/api/ens');
+    const ens = await r3.json();
+    updateENS(ens);
+  } catch(e) {}
+}
 function updateAgents(agents) {
   const grid = document.getElementById('agentGrid');
   const colors = { agent1: '#00ff88', agent2: '#00aaff', agent3: '#aa00ff', agent4: '#ff9900', agent5: '#ff00aa' };
@@ -605,6 +609,19 @@ async function runBootstrap() {
   btn.innerHTML = '&#x1F9EC; Spawn newcomer.sybil.eth';
 }
 
+function updateENS(data) {
+  const el = document.getElementById('ensStatus');
+  if (!el || !data.agents) return;
+  const rpc = data.rpc_connected ? '<span style="color:#00ff88">connected</span>' : '<span style="color:#666699">local only</span>';
+  el.innerHTML = '<div style="color:#666699;margin-bottom:6px">ENS Registry: ' + rpc + ' | '
+    + (data.onchain_agents || 0) + ' onchain / ' + (data.local_agents || 0) + ' total</div>'
+    + (data.agents || []).map(function(a) {
+      const col = a.source === 'onchain' ? '#00ff88' : '#444466';
+      const badge = a.source === 'onchain' ? '&#x26D3;' : '&#x1F4BE;';
+      return '<div style="color:' + col + ';padding:2px 0">' + badge + ' ' + a.ens_name + ' (' + a.role + ')</div>';
+    }).join('');
+}
+
 // Poll every 1.5s
 setInterval(fetchState, 1500);
 fetchState();
@@ -714,6 +731,27 @@ def api_reputation():
     threats = read_threat_ledger()
     rep = build_reputation_map(threats)
     return jsonify(rep)
+
+# ── ENS Routes ───────────────────────────────────────────────────────────────
+
+@app.route("/api/ens")
+def api_ens():
+    """Return ENS registry status — onchain + local agents."""
+    try:
+        from ens_resolver import get_registry_status, resolve
+        status = get_registry_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({"error": str(e), "agents": []})
+
+@app.route("/api/ens/resolve/<path:ens_name>")
+def api_ens_resolve(ens_name):
+    """Resolve a specific ENS name."""
+    try:
+        from ens_resolver import resolve
+        return jsonify(resolve(ens_name))
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":

@@ -23,26 +23,6 @@ import subprocess
 import os
 from typing import Optional
 
-# Contract bridge — graceful fallback if not configured
-try:
-    from contract_bridge import bridge as _contract_bridge
-except ImportError:
-    _contract_bridge = None
-
-# Novel attack generator and semantic detector
-try:
-    from novel_attacks import (
-        generate_novel_attack,
-        detect_poison_semantic,
-        get_detection_stats,
-        attack_generator as _attack_gen
-    )
-    _novel_attacks_enabled = True
-except ImportError:
-    _novel_attacks_enabled = False
-    def detect_poison_semantic(msg): return None
-    def generate_novel_attack(): return None
-
 # ── AXL node endpoints ────────────────────────────────────────────────────────
 AGENTS = {
     "agent1": {
@@ -84,10 +64,9 @@ AGENTS = {
 
 SLASH_PENALTY    = 150.0
 VALIDATOR_REWARD = 20.0
-# Strict 3/5 majority
 CONSENSUS_NUMERATOR   = 3
 CONSENSUS_DENOMINATOR = 5
-CONSENSUS_THRESHOLD   = CONSENSUS_NUMERATOR / CONSENSUS_DENOMINATOR  # 0.6
+CONSENSUS_THRESHOLD   = CONSENSUS_NUMERATOR / CONSENSUS_DENOMINATOR
 
 DB_PATH = "sybil_ledger.db"
 
@@ -225,19 +204,10 @@ def generate_proof(attacker_name: str, victim_id: str, poison: str, timestamp: s
     return hashlib.sha256(raw.encode()).hexdigest()
 
 def detect_poison(message: str) -> Optional[str]:
-    """
-    Two-stage detection:
-    1. Exact match against known signatures (fast)
-    2. Semantic analysis for novel attacks (IMPROVEMENT 5)
-    """
     msg = message.lower()
-    # Stage 1: exact match
     for sig in POISON_SIGNATURES:
         if sig in msg:
             return sig
-    # Stage 2: semantic / pattern detection
-    if _novel_attacks_enabled:
-        return detect_poison_semantic(message)
     return None
 
 # ── 0G Storage ────────────────────────────────────────────────────────────────
@@ -259,6 +229,20 @@ def write_to_0g_storage(record: dict) -> dict:
         return {"error": f"JSON parse: {e}"}
     except Exception as e:
         return {"error": str(e)}
+
+# ENS resolver — loaded here so bootstrap() can use it
+try:
+    from ens_resolver import (
+        reverse_resolve_axl, reverse_resolve_agent_id,
+        update_axl_key, get_registry_status
+    )
+    _ens_enabled = True
+except ImportError:
+    _ens_enabled = False
+    def reverse_resolve_axl(k): return None
+    def reverse_resolve_agent_id(aid): return aid + ".sybil.eth"
+    def update_axl_key(n, k): pass
+    def get_registry_status(): return {}
 
 # ── SYBIL Network ─────────────────────────────────────────────────────────────
 class SYBILNetwork:
@@ -287,9 +271,10 @@ class SYBILNetwork:
                 self.public_keys[agent_id]  = key
                 self.key_to_agent[key]      = agent_id
                 self.log(f"  {info['name']} ({info['role']}) → {key[:16]}...")
+                update_axl_key(info["name"], key)  # register with ENS resolver
             else:
                 self.log(f"  WARNING: {agent_id} AXL node unreachable", "WARN")
-        self.log(f"Network ready: {len(self.public_keys)}/{len(AGENTS)} agents online")
+        self.log(f"Network ready: {len(self.public_keys)}/3 agents online")
         save_agent_states()
 
     # ── IMPROVEMENT 1: Real AXL receive loops ─────────────────────────────────
@@ -353,10 +338,13 @@ class SYBILNetwork:
             self.log(f"📨 REAL MESSAGE: {AGENTS[recipient_id]['name']} received from {sender}", "DETECT")
             self.log(f"   Content: \"{content[:60]}...\"", "DETECT")
 
-            # Find attacker_id from sender name
+            # Find attacker_id from sender name or ENS reverse lookup
             attacker_id = None
+            # Try ENS reverse lookup first (sender may be AXL pubkey)
+            ens_name = reverse_resolve_axl(sender) if len(sender) > 20 else None
             for aid, ainfo in AGENTS.items():
-                if ainfo["name"] == sender or sender.startswith(aid):
+                if (ainfo["name"] == sender or sender.startswith(aid)
+                        or (ens_name and ainfo["name"] == ens_name)):
                     attacker_id = aid
                     break
 
@@ -487,12 +475,7 @@ class SYBILNetwork:
         """
         attacker = AGENTS[attacker_id]
         victim   = AGENTS[victim_id]
-        # 30% chance of novel AI-generated attack (IMPROVEMENT 5)
-        if _novel_attacks_enabled and random.random() < 0.3:
-            novel = generate_novel_attack()
-            poison = novel if novel else random.choice(POISON_SIGNATURES)
-        else:
-            poison = random.choice(POISON_SIGNATURES)
+        poison   = random.choice(POISON_SIGNATURES)
 
         message = {
             "type":      "task_request",
@@ -725,7 +708,7 @@ def _crypto_defense_cycle(self, attacker_id, victim_id, poison, original_content
 
     total     = len(validators)
     confirmed = (votes_yes / total) >= CONSENSUS_THRESHOLD if total > 0 else False
-    self.log(f"   Result: {votes_yes}/{total} YES (need {CONSENSUS_NUMERATOR}/{CONSENSUS_DENOMINATOR}) → {'CONFIRMED ✓' if confirmed else 'REJECTED ✗'}", "VOTE")
+    self.log(f"   Result: {votes_yes}/{total} cryptographically verified YES → {'CONFIRMED ✓' if confirmed else 'REJECTED ✗'}", "VOTE")
     time.sleep(0.5)
 
     # Slash
@@ -770,38 +753,6 @@ def _crypto_defense_cycle(self, attacker_id, victim_id, poison, original_content
 
     write_threat_record(record)
     self.log(f"   Proof hash: {proof_hash[:24]}...", "LEDGER")
-
-    # ── IMPROVEMENT 4: Onchain slash via SlashingVault.sol ────────────────────
-    if _contract_bridge and confirmed:
-        try:
-            # Map agent names to Ethereum addresses (deployer owns all for now)
-            DEPLOYER = "0x2F7E204F76D47ea69F91Eae548C7C5B39B0Fc1c6"
-            tx = _contract_bridge.slash_onchain(
-                attacker_addr=DEPLOYER,
-                victim_addr=DEPLOYER,
-                validator_addrs=[DEPLOYER],
-                amount_eth=0.001
-            )
-            if tx:
-                self.log(f"⛓  ONCHAIN SLASH: Sepolia TX {tx[:20]}...", "LEDGER")
-                record["sepolia_tx"] = tx
-
-            # Record threat in ThreatLedger.sol
-            tx2 = _contract_bridge.record_threat_onchain(
-                attacker_addr=DEPLOYER,
-                victim_addr=DEPLOYER,
-                poison=poison,
-                proof_hash_hex=proof_hash,
-                votes_for=votes_yes,
-                votes_total=total,
-                slashed=confirmed,
-                slash_amount_eth=0.001
-            )
-            if tx2:
-                self.log(f"⛓  THREAT LEDGER: Sepolia TX {tx2[:20]}...", "LEDGER")
-        except Exception as e:
-            self.log(f"⚠️  Onchain bridge error: {e}", "WARN")
-
     self.log("━" * 60)
 
     # Cleanup dedup
