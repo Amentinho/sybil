@@ -366,6 +366,8 @@ DASHBOARD_HTML = """
         <option value="agent1">atlas.sybil.eth</option>
         <option value="agent2">sentinel.sybil.eth</option>
         <option value="agent3">oracle.sybil.eth</option>
+        <option value="agent4">warden.sybil.eth</option>
+        <option value="agent5">cipher.sybil.eth</option>
       </select>
     </div>
     <div class="select-wrap">
@@ -374,6 +376,8 @@ DASHBOARD_HTML = """
         <option value="agent2">sentinel.sybil.eth</option>
         <option value="agent1">atlas.sybil.eth</option>
         <option value="agent3">oracle.sybil.eth</option>
+        <option value="agent4">warden.sybil.eth</option>
+        <option value="agent5">cipher.sybil.eth</option>
       </select>
     </div>
     <button class="attack-btn" id="attackBtn" onclick="triggerAttack()">
@@ -478,7 +482,7 @@ async function fetchState() {
 
 function updateAgents(agents) {
   const grid = document.getElementById('agentGrid');
-  const colors = { agent1: '#00ff88', agent2: '#00aaff', agent3: '#aa00ff' };
+  const colors = { agent1: '#00ff88', agent2: '#00aaff', agent3: '#aa00ff', agent4: '#ff9900', agent5: '#ff00aa' };
   grid.innerHTML = Object.entries(agents).map(function(entry) {
     const id = entry[0], a = entry[1];
     const pct = Math.max(0, (a.stake / 1000) * 100).toFixed(1);
