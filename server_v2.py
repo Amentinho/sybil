@@ -475,6 +475,14 @@ let isAttacking = false;
 
 async function fetchState() {
   try {
+    const r0 = await fetch('/api/og_status');
+    const og = await r0.json();
+    const el = document.getElementById('ogStatus');
+    if (el) el.innerHTML = og.status === 'live'
+      ? '<span style="color:#00ff88">LIVE</span> - Writing to 0G Galileo testnet | <a href="' + og.explorer + '" target="_blank" style="color:#00aaff">Explorer &#x2197;</a>'
+      : '<span style="color:#ffaa00">LOCAL ONLY</span> - ' + (og.message || 'set OG_PRIVATE_KEY');
+  } catch(e) {}
+  try {
     const r = await fetch('/api/state');
     const data = await r.json();
     updateAgents(data.agents);
