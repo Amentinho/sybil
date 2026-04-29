@@ -2,3 +2,4 @@ node_modules/
 sybil_ledger.db
 __pycache__/
 *.pyc
+go*.tar.gz
