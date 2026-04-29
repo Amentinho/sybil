@@ -100,3 +100,13 @@ echo "  Setup complete!"
 echo "  Run: bash start-sybil.sh"
 echo "  Dashboard opens automatically at port 5001"
 echo "================================================"
+
+# Build AXL from source
+echo "Building AXL node..."
+cd ~
+if [ ! -d axl-src ]; then
+  git clone https://github.com/gensyn-ai/axl.git axl-src
+fi
+cd axl-src
+go build -o ~/Projects/axl/node ./cmd/... 2>/dev/null && echo "AXL built" || echo "AXL build failed"
+cd /workspaces/sybil

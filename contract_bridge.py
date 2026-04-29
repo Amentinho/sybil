@@ -205,7 +205,7 @@ class ContractBridge:
         if not self.enabled:
             return None
         try:
-            nonce = self.w3.eth.get_transaction_count(self.account.address)
+            nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')
             tx = fn.build_transaction({
                 "from":     self.account.address,
                 "nonce":    nonce,
