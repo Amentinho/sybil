@@ -210,7 +210,7 @@ class ContractBridge:
                 "from":     self.account.address,
                 "nonce":    nonce,
                 "gas":      gas,
-                "gasPrice": self.w3.eth.gas_price,
+                "gasPrice": int(self.w3.eth.gas_price * 1.5),
                 "chainId":  self.w3.eth.chain_id,
             })
             signed  = self.w3.eth.account.sign_transaction(tx, self.account.key)
